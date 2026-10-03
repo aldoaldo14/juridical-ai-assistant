@@ -10,11 +10,23 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProcesarRouteImport } from './routes/procesar'
+import { Route as PruebaRouteImport } from './routes/prueba'
 import { Route as ProyectosIdRouteImport } from './routes/proyectos.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProcesarRoute = ProcesarRouteImport.update({
+  id: '/procesar',
+  path: '/procesar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PruebaRoute = PruebaRouteImport.update({
+  id: '/prueba',
+  path: '/prueba',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProyectosIdRoute = ProyectosIdRouteImport.update({
@@ -25,27 +37,35 @@ const ProyectosIdRoute = ProyectosIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/procesar': typeof ProcesarRoute
+  '/prueba': typeof PruebaRoute
   '/proyectos/$id': typeof ProyectosIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/procesar': typeof ProcesarRoute
+  '/prueba': typeof PruebaRoute
   '/proyectos/$id': typeof ProyectosIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/procesar': typeof ProcesarRoute
+  '/prueba': typeof PruebaRoute
   '/proyectos/$id': typeof ProyectosIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/proyectos/$id'
+  fullPaths: '/' | '/procesar' | '/prueba' | '/proyectos/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/proyectos/$id'
-  id: '__root__' | '/' | '/proyectos/$id'
+  to: '/' | '/procesar' | '/prueba' | '/proyectos/$id'
+  id: '__root__' | '/' | '/procesar' | '/prueba' | '/proyectos/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ProcesarRoute: typeof ProcesarRoute
+  PruebaRoute: typeof PruebaRoute
   ProyectosIdRoute: typeof ProyectosIdRoute
 }
 
@@ -56,6 +76,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/procesar': {
+      id: '/procesar'
+      path: '/procesar'
+      fullPath: '/procesar'
+      preLoaderRoute: typeof ProcesarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/prueba': {
+      id: '/prueba'
+      path: '/prueba'
+      fullPath: '/prueba'
+      preLoaderRoute: typeof PruebaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/proyectos/$id': {
@@ -70,6 +104,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ProcesarRoute: ProcesarRoute,
+  PruebaRoute: PruebaRoute,
   ProyectosIdRoute: ProyectosIdRoute,
 }
 export const routeTree = rootRouteImport
