@@ -13,10 +13,10 @@ function explainFetchFailure(url: string): Error {
   const httpTarget = url.startsWith("http://");
   if (httpsPage && httpTarget) {
     return new Error(
-      "El navegador bloqueó la llamada: esta página es HTTPS y tu servidor local es HTTP. " +
-        "Soluciones: (1) en LM Studio activa “Serve on Local Network” y CORS en Server Settings y vuelve a probar; " +
-        "(2) en Chrome/Edge abre chrome://flags/#allow-insecure-localhost, actívalo y reinicia el navegador; " +
-        "o (3) sirve esta app en HTTP local.",
+      "No se pudo conectar. Tu servidor local está en HTTP y esta página en HTTPS; Chrome normalmente lo permite, así que casi siempre la causa es CORS. " +
+        "Soluciones: (1) en LM Studio activa “Enable CORS” en Server Settings y vuelve a probar; " +
+        "(2) verifica que la dirección sea exacta: http://127.0.0.1:1234/v1; " +
+        "(3) si aún falla, prueba en Firefox, o dime y preparamos la app para correrla en local (HTTP).",
     );
   }
   return new Error(
