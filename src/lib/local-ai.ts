@@ -2,7 +2,12 @@ import type { Endpoint } from "./store";
 
 type Msg = { role: "system" | "user"; content: unknown };
 
-const base = (u: string) => u.trim().replace(/\/+$/, "");
+const base = (u: string) => {
+  let s = u.trim().replace(/\/+$/, "");
+  if (!/^https?:\/\//i.test(s)) s = `http://${s}`;
+  if (!/\/v1$/i.test(s) && !/\/v1\//i.test(s)) s = `${s}/v1`;
+  return s;
+};
 const headers = (ep: Endpoint) => ({
   "Content-Type": "application/json",
   ...(ep.apiKey ? { Authorization: `Bearer ${ep.apiKey}` } : {}),
