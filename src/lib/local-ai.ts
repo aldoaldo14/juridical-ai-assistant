@@ -4,6 +4,8 @@ type Msg = { role: "system" | "user"; content: unknown };
 
 const base = (u: string) => {
   let s = u.trim().replace(/\/+$/, "");
+  // Corrige errores típicos de escritura: "http//", "http:/", "htp://", etc.
+  s = s.replace(/^h?t?t?p?s?:?\/*\/*/i, (m) => (/^https/i.test(m) ? "https://" : m ? "http://" : ""));
   if (!/^https?:\/\//i.test(s)) s = `http://${s}`;
   if (!/\/v1$/i.test(s) && !/\/v1\//i.test(s)) s = `${s}/v1`;
   return s;
