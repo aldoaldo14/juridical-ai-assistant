@@ -78,16 +78,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Gabinete — IA local para investigación jurídica" },
+      { name: "description", content: "OCR y codificación de artículos jurídicos con modelos en tu propia computadora." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" },
       {
         rel: "stylesheet",
         href: appCss,
@@ -121,7 +119,19 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <div className="min-h-screen">
+        <nav className="border-b border-border bg-card">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-6 px-6 py-4">
+            <Link to="/" className="font-serif text-xl font-semibold text-primary">Gabinete</Link>
+            {([["/", "Proyectos"], ["/prueba", "Prueba de rendimiento"], ["/procesar", "Procesar PDFs"]] as const).map(([to, l]) => (
+              <Link key={to} to={to} activeOptions={{ exact: true }} className="text-sm text-muted-foreground hover:text-foreground" activeProps={{ className: "text-sm font-medium text-foreground underline underline-offset-8" }}>{l}</Link>
+            ))}
+          </div>
+        </nav>
+        <main className="mx-auto max-w-6xl px-6 py-10">
+          <Outlet />
+        </main>
+      </div>
     </QueryClientProvider>
   );
 }
