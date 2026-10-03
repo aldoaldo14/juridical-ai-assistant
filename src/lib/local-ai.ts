@@ -8,8 +8,31 @@ const headers = (ep: Endpoint) => ({
   ...(ep.apiKey ? { Authorization: `Bearer ${ep.apiKey}` } : {}),
 });
 
+function explainFetchFailure(url: string): Error {
+  const httpsPage = typeof window !== "undefined" && window.location.protocol === "https:";
+  const httpTarget = url.startsWith("http://");
+  if (httpsPage && httpTarget) {
+    return new Error(
+      "El navegador bloqueó la llamada: esta página es HTTPS y tu servidor local es HTTP. " +
+        "Soluciones: (1) en LM Studio activa “Serve on Local Network” y CORS en Server Settings y vuelve a probar; " +
+        "(2) en Chrome/Edge abre chrome://flags/#allow-insecure-localhost, actívalo y reinicia el navegador; " +
+        "o (3) sirve esta app en HTTP local.",
+    );
+  }
+  return new Error(
+    "No se pudo conectar. Revisa que el servidor esté encendido, que la dirección sea exacta (p. ej. http://127.0.0.1:1234/v1) " +
+      "y que CORS esté activado (en LM Studio: Server Settings → Enable CORS).",
+  );
+}
+
 export async function listModels(ep: Endpoint): Promise<string[]> {
-  const r = await fetch(`${base(ep.baseUrl)}/models`, { headers: headers(ep) });
+  const url = `${base(ep.baseUrl)}/models`;
+  let r: Response;
+  try {
+    r = await fetch(url, { headers: headers(ep) });
+  } catch {
+    throw explainFetchFailure(url);
+  }
   if (!r.ok) throw new Error(`El servidor respondió ${r.status}`);
   const j = await r.json();
   return (j.data ?? []).map((m: { id: string }) => m.id);
@@ -25,7 +48,7 @@ export async function chat(ep: Endpoint, messages: Msg[]) {
       body: JSON.stringify({ model: ep.model, messages, temperature: 0, stream: false }),
     });
   } catch {
-    throw new Error("No se pudo conectar. ¿Está encendido el servidor local y permite CORS?");
+    throw explainFetchFailure(`${base(ep.baseUrl)}/chat/completions`);
   }
   const ms = performance.now() - t0;
   if (!r.ok) throw new Error(`Error ${r.status}: ${(await r.text()).slice(0, 200)}`);
