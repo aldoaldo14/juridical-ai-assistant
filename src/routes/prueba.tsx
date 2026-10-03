@@ -141,7 +141,7 @@ function Bench() {
                       <td>{r.task === "ocr" ? "OCR" : "Análisis"}</td>
                       <td>{good.length}/{r.pages.length}</td>
                       <td className="font-serif text-lg">{good.length ? (median(good.map((p) => p.ms)) / 1000).toFixed(1) : "—"}</td>
-                      <td>{good[0] ? (good[0].ms / 1000).toFixed(1) : "—"}</td>
+                      <td>{good[0] ? (good[0]!.ms / 1000).toFixed(1) : "—"}</td>
                       <td>{tps.length ? median(tps).toFixed(1) : "—"}</td>
                       <td className={r.pages.length - good.length ? "text-destructive" : ""} title={r.pages.find((p) => p.error)?.error}>{r.pages.length - good.length}</td>
                       <td><Input className="w-20" type="number" step={0.1} value={r.vramGB ?? ""} onChange={(e) => update(r.id, { vramGB: e.target.value ? Number(e.target.value) : undefined })} /></td>

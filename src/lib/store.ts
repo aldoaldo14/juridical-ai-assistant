@@ -12,7 +12,7 @@ export type Project = {
   variables: Variable[];
   createdAt: string;
 };
-export type BenchPage = { page: number; ms: number; chars: number; tokens?: number; error?: string };
+export type BenchPage = { page: number; ms: number; chars: number; tokens?: number | undefined; error?: string };
 export type BenchRun = {
   id: string;
   date: string;
@@ -22,7 +22,7 @@ export type BenchRun = {
   model: string;
   file: string;
   pages: BenchPage[];
-  vramGB?: number;
+  vramGB?: number | undefined;
   notes?: string;
 };
 export type DocResult = {
@@ -102,7 +102,7 @@ export function median(nums: number[]) {
   if (!nums.length) return 0;
   const s = [...nums].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 }
 
 export function download(name: string, content: string, type = "application/json") {
