@@ -25,6 +25,14 @@ export type BenchRun = {
   vramGB?: number | undefined;
   notes?: string;
 };
+/** Resultado parcial del modelo de análisis sobre un fragmento del documento. */
+export type FragmentResult = {
+  fragment: number;
+  firstPage: number;
+  lastPage: number;
+  ms: number;
+  json: unknown;
+};
 export type DocResult = {
   id: string;
   projectId: string;
@@ -35,6 +43,8 @@ export type DocResult = {
   llmMs: number;
   text: string;
   json: unknown;
+  /** Solo en documentos analizados por partes: lo que el modelo extrajo de cada fragmento. */
+  fragments?: FragmentResult[];
   error?: string;
 };
 

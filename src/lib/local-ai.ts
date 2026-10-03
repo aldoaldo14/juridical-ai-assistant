@@ -1,6 +1,6 @@
 import type { Endpoint } from "./store";
 
-type Msg = { role: "system" | "user"; content: unknown };
+export type Msg = { role: "system" | "user"; content: unknown };
 
 const base = (u: string) => {
   let s = u.trim().replace(/\/+$/, "");

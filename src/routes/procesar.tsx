@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import { type DocResult, type Project, download, uid, useProjects, useResults } from "@/lib/store";
-import { chat, ocrPage, parseJson } from "@/lib/local-ai";
+import { type DocResult, download, uid, useProjects, useResults } from "@/lib/store";
+import { chat, ocrPage } from "@/lib/local-ai";
+import { AnalysisError, analyzeDocument } from "@/lib/analisis";
+import { pageRange } from "@/lib/fragmentos";
 import { openPdf } from "@/lib/pdf";
 import { Button, Card, Field, Input } from "@/components/ui-lite";
 
@@ -18,11 +20,6 @@ export const Route = createFileRoute("/procesar")({
   }),
   component: Process,
 });
-
-function buildPrompt(p: Project, text: string) {
-  const vars = p.variables.map((v) => `- "${v.name}" (${v.type}): ${v.description}`).join("\n");
-  return `Tema del proyecto: ${p.topic || "(sin especificar)"}\n\nVariables a extraer:\n${vars}\n\nTexto del documento:\n${text.slice(0, p.llm.maxChars)}`;
-}
 
 function Process() {
   const { proyecto } = Route.useSearch();
@@ -57,15 +54,16 @@ function Process() {
           }
         }
         r.text = parts.map((t, i) => `--- Página ${i + 1} ---\n${t}`).join("\n\n");
-        setStatus(`Documento ${fi + 1}/${files.length} · codificando variables…`);
-        const res = await chat(project.llm, [
-          { role: "system", content: project.llm.systemPrompt },
-          { role: "user", content: buildPrompt(project, r.text) },
-        ]);
+        // El documento completo llega al modelo: si no cabe en un fragmento, se analiza por partes.
+        const res = await analyzeDocument(project, parts, chat, (m) =>
+          setStatus(`Documento ${fi + 1}/${files.length} · ${m}`),
+        );
         r.llmMs = res.ms;
-        r.json = parseJson(res.content);
+        r.json = res.json;
+        if (res.fragments.length > 1) r.fragments = res.fragments;
       } catch (e) {
         r.error = e instanceof Error ? e.message : String(e);
+        if (e instanceof AnalysisError && e.fragments.length) r.fragments = e.fragments;
       }
       saveResults((prev) => [r, ...prev]);
     }
@@ -75,7 +73,7 @@ function Process() {
   };
 
   const exportAll = () =>
-    download(`${project?.name ?? "proyecto"}.json`, JSON.stringify(mine.map((r) => ({ archivo: r.file, paginas: r.pages, ...(typeof r.json === "object" ? r.json : { resultado: r.json }), error: r.error })), null, 2));
+    download(`${project?.name ?? "proyecto"}.json`, JSON.stringify(mine.map((r) => ({ archivo: r.file, paginas: r.pages, ...(typeof r.json === "object" ? r.json : { resultado: r.json }), ...(r.fragments ? { _parciales: r.fragments.map((f) => ({ fragmento: f.fragment, paginas: [f.firstPage, f.lastPage], resultado: f.json })) } : {}), error: r.error })), null, 2));
 
   if (!projects.length)
     return <p className="text-muted-foreground">Primero <Link to="/" className="underline">crea un proyecto</Link>.</p>;
@@ -112,7 +110,7 @@ function Process() {
                   <button className="text-left" onClick={() => setOpen(open === r.id ? null : r.id)}>
                     <span className="font-medium">{r.file}</span>
                     <span className="ml-2 text-xs text-muted-foreground">
-                      {r.pages} pág · OCR {(r.ocrMs / 1000).toFixed(1)} s{r.pages ? ` (${(r.ocrMs / 1000 / r.pages).toFixed(1)} s/pág)` : ""} · análisis {(r.llmMs / 1000).toFixed(1)} s
+                      {r.pages} pág · OCR {(r.ocrMs / 1000).toFixed(1)} s{r.pages ? ` (${(r.ocrMs / 1000 / r.pages).toFixed(1)} s/pág)` : ""} · análisis {(r.llmMs / 1000).toFixed(1)} s{r.fragments ? ` · ${r.fragments.length} fragmentos` : ""}
                     </span>
                     {r.error && <span className="ml-2 text-xs text-destructive">{r.error}</span>}
                   </button>
@@ -122,6 +120,25 @@ function Process() {
                   <div className="mt-3 grid gap-3 lg:grid-cols-2">
                     <pre className="max-h-96 overflow-auto rounded-md bg-muted p-3 text-xs">{JSON.stringify(r.json, null, 2)}</pre>
                     <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">{r.text}</pre>
+                    {r.fragments && (
+                      <details className="lg:col-span-2">
+                        <summary className="cursor-pointer text-sm text-muted-foreground">
+                          Resultados parciales por fragmento ({r.fragments.length})
+                        </summary>
+                        <div className="mt-2 grid gap-3 lg:grid-cols-2">
+                          {r.fragments.map((f) => (
+                            <div key={f.fragment}>
+                              <p className="mb-1 text-xs text-muted-foreground">
+                                {`Fragmento ${f.fragment} · ${pageRange(f)} · ${(f.ms / 1000).toFixed(1)} s`}
+                              </p>
+                              <pre className="max-h-64 overflow-auto rounded-md bg-muted p-3 text-xs">
+                                {JSON.stringify(f.json, null, 2)}
+                              </pre>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
                   </div>
                 )}
               </li>

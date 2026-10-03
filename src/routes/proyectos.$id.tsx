@@ -100,7 +100,7 @@ function ProjectPage() {
         <div className="space-y-3">
           <EndpointFields value={p.llm} onChange={(e) => set({ llm: { ...p.llm, ...e } })} />
           <Field label="Instrucciones al modelo"><Textarea rows={5} value={p.llm.systemPrompt} onChange={(e) => set({ llm: { ...p.llm, systemPrompt: e.target.value } })} /></Field>
-          <Field label="Máximo de caracteres enviados por documento" hint="Ajústalo según la memoria de contexto medida en tu prueba">
+          <Field label="Máximo de caracteres por fragmento" hint="Los documentos más largos se dividen en fragmentos de páginas completas, se codifican por partes y se consolidan al final. Ajústalo según el contexto con que cargues el modelo (mínimo 2000).">
             <Input type="number" value={p.llm.maxChars} onChange={(e) => set({ llm: { ...p.llm, maxChars: Number(e.target.value) } })} />
           </Field>
         </div>
