@@ -21,7 +21,7 @@ export const Route = createFileRoute("/prueba")({
 const STEPS = [
   ["Prepara un set de prueba", "Elige 3 PDFs de 5–10 páginas: uno con texto digital, uno escaneado y uno con tablas estadísticas. Usa siempre los mismos para que las comparaciones sean justas."],
   ["Instala un servidor local (el que prefieras)", "Cualquier programa que ofrezca una dirección compatible con OpenAI sirve: por ejemplo LM Studio, Ollama, llama.cpp o vLLM. La app no te obliga a ninguno; precisamente esta prueba sirve para decidir."],
-  ["Permite que esta página lo use", "Activa la opción CORS del servidor (en LM Studio: “Enable CORS”; en Ollama: variable OLLAMA_ORIGINS=*). Luego pulsa “Probar conexión” abajo."],
+  ["Permite que esta página lo use", "En LM Studio: Server Settings → activa “Enable CORS” y “Serve on Local Network”. En Ollama: variable OLLAMA_ORIGINS=*. Usa la dirección exacta, p. ej. http://127.0.0.1:1234/v1. Si aún sale “failed to fetch”, el navegador bloquea la llamada porque esta página es HTTPS y tu servidor es HTTP: en Chrome/Edge abre chrome://flags/#allow-insecure-localhost, actívalo y reinicia el navegador. Luego pulsa “Probar conexión” abajo."],
   ["Abre un monitor de memoria", "En una terminal ejecuta: nvidia-smi -l 1. Anota la memoria máxima usada durante cada corrida."],
   ["Corre cada modelo 3 veces", "La primera página suele ser lenta (carga del modelo). La app reporta la mediana, que ignora ese arranque. Prueba OCR con PaddleOCR-VL y, si Gemma 4 acepta imágenes en tu servidor, también OCR con Gemma para comparar."],
   ["Prueba ambos modelos a la vez", "Carga los dos modelos y repite: si la memoria no alcanza o el tiempo se dispara, conviene trabajar por turnos (primero OCR de todo, luego análisis)."],
