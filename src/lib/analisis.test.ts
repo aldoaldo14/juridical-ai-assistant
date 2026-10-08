@@ -111,3 +111,120 @@ describe("analyzeDocument", () => {
     expect((error as Error).message).toBe("No se pudo conectar.");
   });
 });
+
+describe("analyzeDocument con libro de códigos", () => {
+  const withCodebook = (maxChars: number): Project => ({
+    ...project(maxChars),
+    categories: [
+      {
+        name: "sentido",
+        description: "Qué afirma el texto.",
+        level: "hallazgo",
+        multiple: false,
+        values: [
+          { value: "deficiencia", definition: "una carencia" },
+          { value: "avance", definition: "" },
+        ],
+      },
+    ],
+  });
+
+  it("envía el esquema, describe las categorías y verifica las citas", async () => {
+    const opts: unknown[] = [];
+    const chat: ChatFn = async (_ep, _messages, o) => {
+      opts.push(o);
+      return {
+        content: JSON.stringify({
+          titulo: "T",
+          hallazgos: [
+            {
+              cita: "la UIF   carece de personal",
+              pagina: 1,
+              resumen: "r",
+              sentido: "deficiencia",
+            },
+            { cita: "texto inventado", pagina: 2, resumen: "r", sentido: "avance" },
+          ],
+        }),
+        ms: 10,
+      };
+    };
+    const calls: string[] = [];
+    const spy: ChatFn = async (ep, m, o) => {
+      calls.push(text(m[1]!));
+      return chat(ep, m, o);
+    };
+
+    const res = await analyzeDocument(
+      withCodebook(24000),
+      ["La UIF carece de personal.", "otra"],
+      spy,
+    );
+
+    expect(calls[0]).toContain(
+      '- "sentido" (una sola opción): Qué afirma el texto.\n    · "deficiencia": una carencia\n    · "avance"',
+    );
+    expect(calls[0]).toContain('incluye la clave "hallazgos"');
+    expect((opts[0] as { schema: { properties: object } }).schema.properties).toHaveProperty(
+      "hallazgos",
+    );
+    const found = (res.json as { hallazgos: Record<string, unknown>[] }).hallazgos;
+    expect(found.map((f) => f["cita_verificada"])).toEqual([true, false]);
+    expect(found[0]!["paginas_cita"]).toEqual([1]);
+    expect(res.schemaRejected).toBe(false);
+  });
+
+  it("une los hallazgos de todos los fragmentos sin pasarlos por la consolidación", async () => {
+    const pages = Array.from({ length: 6 }, (_, i) =>
+      `Página ${i + 1}: la autoridad ${i + 1} falla. `.repeat(60),
+    );
+    const { chat, calls } = fakeChat((messages, call) =>
+      messages[0]!.content === CONSOLIDATION_PROMPT
+        ? '{"titulo":"final","hallazgos":[{"cita":"inventada"}]}'
+        : JSON.stringify({
+            titulo: null,
+            hallazgos: [
+              {
+                cita: `la autoridad ${call} falla`,
+                pagina: call,
+                resumen: "r",
+                sentido: "deficiencia",
+              },
+            ],
+          }),
+    );
+
+    const res = await analyzeDocument(withCodebook(4000), pages, chat);
+
+    const reduce = calls.filter((c) => c[0]!.content === CONSOLIDATION_PROMPT);
+    expect(reduce.length).toBeGreaterThan(0);
+    reduce.forEach((c) => {
+      expect(text(c[1]!)).not.toContain("hallazgos");
+      expect(text(c[1]!)).not.toContain("incluye la clave");
+    });
+    const found = (res.json as { titulo: string; hallazgos: Record<string, unknown>[] }).hallazgos;
+    expect((res.json as { titulo: string }).titulo).toBe("final");
+    expect(found).toHaveLength(res.fragments.length);
+    expect(found.every((f) => f["cita_verificada"] === true)).toBe(true);
+  });
+
+  it("no envía esquema si el proyecto lo desactiva", async () => {
+    const p = withCodebook(24000);
+    p.llm.strictJson = false;
+    let sent: unknown = "sin llamar";
+    await analyzeDocument(p, ["uno"], async (_ep, _m, o) => {
+      sent = o?.schema;
+      return { content: "{}", ms: 1 };
+    });
+    expect(sent).toBeUndefined();
+  });
+
+  it("marca el resultado cuando el servidor rechaza el esquema", async () => {
+    const res = await analyzeDocument(withCodebook(24000), ["uno"], async () => ({
+      content: '{"hallazgos":[]}',
+      ms: 1,
+      schemaRejected: true,
+    }));
+    expect(res.schemaRejected).toBe(true);
+  });
+});

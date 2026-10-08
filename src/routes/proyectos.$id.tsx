@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { type Project, type Variable, useProjects } from "@/lib/store";
 import { Button, Card, Field, Input, Textarea } from "@/components/ui-lite";
 import { EndpointFields } from "@/components/EndpointFields";
+import { CategoriesEditor } from "@/components/CategoriesEditor";
 
 export const Route = createFileRoute("/proyectos/$id")({
   head: () => ({
@@ -74,6 +75,10 @@ function ProjectPage() {
         </div>
       </Card>
 
+      <Card title="Categorías (libro de códigos)">
+        <CategoriesEditor categories={p.categories ?? []} onChange={(categories) => set({ categories })} />
+      </Card>
+
       <Card title="Paso 1 · Lectura de páginas (OCR)">
         <div className="mb-4 flex gap-4 text-sm">
           {(["modelo", "texto-pdf"] as const).map((m) => (
@@ -103,6 +108,13 @@ function ProjectPage() {
           <Field label="Máximo de caracteres por fragmento" hint="Los documentos más largos se dividen en fragmentos de páginas completas, se codifican por partes y se consolidan al final. Ajústalo según el contexto con que cargues el modelo (mínimo 2000).">
             <Input type="number" value={p.llm.maxChars} onChange={(e) => set({ llm: { ...p.llm, maxChars: Number(e.target.value) } })} />
           </Field>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1" checked={p.llm.strictJson !== false} onChange={(e) => set({ llm: { ...p.llm, strictJson: e.target.checked } })} />
+            <span>
+              Exigir el formato con esquema JSON (recomendado)
+              <span className="block text-xs text-muted-foreground">El servidor obliga al modelo a responder con las claves y los valores de categoría definidos. Si el servidor no lo admite, la app repite la solicitud sin esquema y lo indica en el resultado.</span>
+            </span>
+          </label>
         </div>
       </Card>
     </div>

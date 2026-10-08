@@ -5,6 +5,7 @@ import { type DocResult, download, uid, useProjects, useResults } from "@/lib/st
 import { chat, ocrPage } from "@/lib/local-ai";
 import { AnalysisError, analyzeDocument } from "@/lib/analisis";
 import { pageRange } from "@/lib/fragmentos";
+import { findingsCsv, findingsOf, usesFindings } from "@/lib/categorias";
 import { openPdf } from "@/lib/pdf";
 import { Button, Card, Field, Input } from "@/components/ui-lite";
 
@@ -61,6 +62,7 @@ function Process() {
         r.llmMs = res.ms;
         r.json = res.json;
         if (res.fragments.length > 1) r.fragments = res.fragments;
+        if (res.schemaRejected) r.schemaRejected = true;
       } catch (e) {
         r.error = e instanceof Error ? e.message : String(e);
         if (e instanceof AnalysisError && e.fragments.length) r.fragments = e.fragments;
@@ -74,6 +76,9 @@ function Process() {
 
   const exportAll = () =>
     download(`${project?.name ?? "proyecto"}.json`, JSON.stringify(mine.map((r) => ({ archivo: r.file, paginas: r.pages, ...(typeof r.json === "object" ? r.json : { resultado: r.json }), ...(r.fragments ? { _parciales: r.fragments.map((f) => ({ fragmento: f.fragment, paginas: [f.firstPage, f.lastPage], resultado: f.json })) } : {}), error: r.error })), null, 2));
+
+  const exportCsv = () =>
+    project && download(`${project.name}-hallazgos.csv`, findingsCsv(project, mine), "text/csv;charset=utf-8");
 
   if (!projects.length)
     return <p className="text-muted-foreground">Primero <Link to="/" className="underline">crea un proyecto</Link>.</p>;
@@ -101,7 +106,12 @@ function Process() {
         </div>
       </Card>
 
-      <Card title={<div className="flex items-center justify-between">Registros ({mine.length}) {mine.length > 0 && <Button variant="ghost" onClick={exportAll}>Descargar JSON</Button>}</div>}>
+      <Card title={<div className="flex items-center justify-between">Registros ({mine.length}) {mine.length > 0 && (
+        <div className="flex gap-2">
+          {project && usesFindings(project) && <Button variant="ghost" onClick={exportCsv}>Hallazgos (CSV)</Button>}
+          <Button variant="ghost" onClick={exportAll}>Descargar JSON</Button>
+        </div>
+      )}</div>}>
         {mine.length === 0 ? <p className="text-sm text-muted-foreground">Aún no hay documentos procesados en este proyecto.</p> : (
           <ul className="divide-y divide-border">
             {mine.map((r) => (
@@ -110,9 +120,14 @@ function Process() {
                   <button className="text-left" onClick={() => setOpen(open === r.id ? null : r.id)}>
                     <span className="font-medium">{r.file}</span>
                     <span className="ml-2 text-xs text-muted-foreground">
-                      {r.pages} pág · OCR {(r.ocrMs / 1000).toFixed(1)} s{r.pages ? ` (${(r.ocrMs / 1000 / r.pages).toFixed(1)} s/pág)` : ""} · análisis {(r.llmMs / 1000).toFixed(1)} s{r.fragments ? ` · ${r.fragments.length} fragmentos` : ""}
+                      {r.pages} pág · OCR {(r.ocrMs / 1000).toFixed(1)} s{r.pages ? ` (${(r.ocrMs / 1000 / r.pages).toFixed(1)} s/pág)` : ""} · análisis {(r.llmMs / 1000).toFixed(1)} s{r.fragments ? ` · ${r.fragments.length} fragmentos` : ""}{findingsSummary(r.json)}
                     </span>
                     {r.error && <span className="ml-2 text-xs text-destructive">{r.error}</span>}
+                    {r.schemaRejected && (
+                      <span className="ml-2 text-xs text-destructive">
+                        El servidor no aceptó el esquema JSON; las categorías no quedaron garantizadas.
+                      </span>
+                    )}
                   </button>
                   <Button variant="danger" onClick={() => saveResults((prev) => prev.filter((x) => x.id !== r.id))}>✕</Button>
                 </div>
@@ -148,4 +163,12 @@ function Process() {
       </Card>
     </div>
   );
+}
+
+/** " · 12 hallazgos (10 con cita verificada)" o vacío si el registro no tiene hallazgos. */
+function findingsSummary(json: unknown) {
+  const list = findingsOf(json);
+  if (!list.length) return "";
+  const ok = list.filter((f) => f["cita_verificada"] === true).length;
+  return ` · ${list.length} hallazgo${list.length === 1 ? "" : "s"} (${ok} con cita verificada)`;
 }

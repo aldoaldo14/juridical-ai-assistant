@@ -3,19 +3,32 @@
 // para que el modelo lea el documento completo y no solo sus primeras páginas.
 
 import type { FragmentResult, Project } from "./store";
-import { type Msg, parseJson } from "./local-ai";
+import { type ChatOptions, type Msg, parseJson } from "./local-ai";
 import { type Fragment, fragmentLimit, pageRange, splitIntoFragments } from "./fragmentos";
+import {
+  type Finding,
+  buildSchema,
+  categoriesPrompt,
+  findingsOf,
+  usesFindings,
+  verifyFindings,
+  withFindings,
+  withoutFindings,
+} from "./categorias";
 
 export type ChatFn = (
   ep: Project["llm"],
   messages: Msg[],
-) => Promise<{ content: string; ms: number }>;
+  opts?: ChatOptions,
+) => Promise<{ content: string; ms: number; schemaRejected?: boolean }>;
 
 export type Analysis = {
   json: unknown;
   ms: number; // fragmentos + consolidación
   consolidationMs: number;
   fragments: FragmentResult[];
+  /** Algún paso se hizo sin esquema porque el servidor lo rechazó. */
+  schemaRejected: boolean;
 };
 
 /** Error de un fragmento; conserva los resultados parciales ya obtenidos. */
@@ -37,9 +50,11 @@ export const CONSOLIDATION_PROMPT =
   'En las variables de tipo lista y en "relaciones", une los elementos de todos los fragmentos sin repetirlos. ' +
   "Si ningún fragmento contiene un dato, usa null. Responde SOLO con el objeto JSON válido.";
 
-const head = (p: Project) => {
+/** Tema, variables y categorías. `findings: false` omite las instrucciones de hallazgos (consolidación). */
+const head = (p: Project, findings: boolean) => {
   const vars = p.variables.map((v) => `- "${v.name}" (${v.type}): ${v.description}`).join("\n");
-  return `Tema del proyecto: ${p.topic || "(sin especificar)"}\n\nVariables a extraer:\n${vars}`;
+  const cats = categoriesPrompt(p, { findings });
+  return `Tema del proyecto: ${p.topic || "(sin especificar)"}\n\nVariables a extraer:\n${vars}${cats ? `\n\n${cats}` : ""}`;
 };
 
 export function buildPrompt(p: Project, f: Fragment, total: number) {
@@ -48,8 +63,13 @@ export function buildPrompt(p: Project, f: Fragment, total: number) {
       ? `\n\nEste texto es el fragmento ${f.index} de ${total} de un documento más largo (${pageRange(f)}). ` +
         "Extrae solo lo que aparezca en este fragmento y usa null para lo que no aparezca; no supongas lo que dicen los demás fragmentos."
       : "";
-  return `${head(p)}${note}\n\nTexto del documento:\n${f.text}`;
+  return `${head(p, true)}${note}\n\nTexto del documento:\n${f.text}`;
 }
+
+const strict = (p: Project) => p.llm.strictJson !== false;
+
+const parsed = (json: unknown) =>
+  !(json && typeof json === "object" && "_sin_formato_json" in json);
 
 type Piece = { first: number; last: number; firstPage: number; lastPage: number; json: unknown };
 
@@ -85,7 +105,9 @@ async function consolidate(
   onProgress?: (message: string) => void,
 ) {
   const limit = fragmentLimit(p.llm.maxChars);
+  const schema = strict(p) ? buildSchema(p, { findings: false }) : undefined;
   let ms = 0;
+  let schemaRejected = false;
   let current = pieces;
   for (;;) {
     const groups = batches(current, limit);
@@ -98,14 +120,19 @@ async function consolidate(
       );
       const first = group[0]!;
       const last = group[group.length - 1]!;
-      const res = await chat(p.llm, [
-        { role: "system", content: CONSOLIDATION_PROMPT },
-        {
-          role: "user",
-          content: `${head(p)}\n\nResultados parciales (${group.length}):\n\n${group.map(render).join("\n\n")}`,
-        },
-      ]);
+      const res = await chat(
+        p.llm,
+        [
+          { role: "system", content: CONSOLIDATION_PROMPT },
+          {
+            role: "user",
+            content: `${head(p, false)}\n\nResultados parciales (${group.length}):\n\n${group.map(render).join("\n\n")}`,
+          },
+        ],
+        { schema },
+      );
       ms += res.ms;
+      schemaRejected ||= !!res.schemaRejected;
       next.push({
         first: first.first,
         last: last.last,
@@ -114,7 +141,7 @@ async function consolidate(
         json: parseJson(res.content),
       });
     }
-    if (next.length === 1) return { json: next[0]!.json, ms };
+    if (next.length === 1) return { json: next[0]!.json, ms, schemaRejected };
     current = next;
   }
 }
@@ -132,6 +159,9 @@ export async function analyzeDocument(
   const parts = splitIntoFragments(pages, p.llm.maxChars);
   const total = parts.length;
   const fragments: FragmentResult[] = [];
+  const schema = strict(p) ? buildSchema(p, { findings: true }) : undefined;
+  const findings = usesFindings(p);
+  let schemaRejected = false;
 
   for (const f of parts) {
     onProgress?.(
@@ -140,10 +170,15 @@ export async function analyzeDocument(
         : "codificando variables…",
     );
     try {
-      const res = await chat(p.llm, [
-        { role: "system", content: p.llm.systemPrompt },
-        { role: "user", content: buildPrompt(p, f, total) },
-      ]);
+      const res = await chat(
+        p.llm,
+        [
+          { role: "system", content: p.llm.systemPrompt },
+          { role: "user", content: buildPrompt(p, f, total) },
+        ],
+        { schema },
+      );
+      schemaRejected ||= !!res.schemaRejected;
       fragments.push({
         fragment: f.index,
         firstPage: f.firstPage,
@@ -161,7 +196,21 @@ export async function analyzeDocument(
   }
 
   const mapMs = fragments.reduce((sum, f) => sum + f.ms, 0);
-  if (total === 1) return { json: fragments[0]!.json, ms: mapMs, consolidationMs: 0, fragments };
+  // Los hallazgos no pasan por la consolidación: se unen en orden y se verifican contra el texto.
+  const merged: Finding[] = verifyFindings(
+    fragments.flatMap((f) => findingsOf(f.json)),
+    pages,
+  );
+  const finish = (json: unknown) => (findings && parsed(json) ? withFindings(json, merged) : json);
+
+  if (total === 1)
+    return {
+      json: finish(fragments[0]!.json),
+      ms: mapMs,
+      consolidationMs: 0,
+      fragments,
+      schemaRejected,
+    };
 
   try {
     const pieces = fragments.map((f) => ({
@@ -169,10 +218,16 @@ export async function analyzeDocument(
       last: f.fragment,
       firstPage: f.firstPage,
       lastPage: f.lastPage,
-      json: f.json,
+      json: findings ? withoutFindings(f.json) : f.json,
     }));
     const c = await consolidate(p, pieces, chat, onProgress);
-    return { json: c.json, ms: mapMs + c.ms, consolidationMs: c.ms, fragments };
+    return {
+      json: findings ? withFindings(c.json, merged) : c.json,
+      ms: mapMs + c.ms,
+      consolidationMs: c.ms,
+      fragments,
+      schemaRejected: schemaRejected || c.schemaRejected,
+    };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     throw new AnalysisError(`Consolidación: ${message}`, fragments);

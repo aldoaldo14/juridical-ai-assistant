@@ -2,14 +2,31 @@ import { useEffect, useState, useCallback } from "react";
 
 export type Endpoint = { baseUrl: string; model: string; apiKey?: string };
 export type Variable = { name: string; description: string; type: "texto" | "número" | "fecha" | "lista" | "sí/no" };
+/** Valor permitido de una categoría, con su definición operativa (opcional). */
+export type CategoryValue = { value: string; definition: string };
+/**
+ * Categoría de lista cerrada del libro de códigos.
+ * - nivel "documento": un valor para todo el documento (clave en el registro principal).
+ * - nivel "hallazgo": un valor para cada hallazgo (clave dentro de cada elemento de "hallazgos").
+ */
+export type Category = {
+  name: string;
+  description: string;
+  level: "documento" | "hallazgo";
+  multiple: boolean;
+  values: CategoryValue[];
+};
 export type Project = {
   id: string;
   name: string;
   topic: string;
   ocrMode: "modelo" | "texto-pdf";
   ocr: Endpoint & { prompt: string; scale: number };
-  llm: Endpoint & { systemPrompt: string; maxChars: number };
+  /** strictJson: enviar el esquema JSON al servidor para que la respuesta lo cumpla (por omisión, sí). */
+  llm: Endpoint & { systemPrompt: string; maxChars: number; strictJson?: boolean };
   variables: Variable[];
+  /** Libro de códigos. Los proyectos creados antes de esta función no lo tienen. */
+  categories?: Category[];
   createdAt: string;
 };
 export type BenchPage = { page: number; ms: number; chars: number; tokens?: number | undefined; error?: string };
@@ -45,6 +62,8 @@ export type DocResult = {
   json: unknown;
   /** Solo en documentos analizados por partes: lo que el modelo extrajo de cada fragmento. */
   fragments?: FragmentResult[];
+  /** Si el servidor rechazó el esquema JSON y la respuesta se pidió sin él. */
+  schemaRejected?: boolean;
   error?: string;
 };
 
@@ -96,6 +115,7 @@ export function newProject(): Project {
       baseUrl: "http://localhost:11434/v1",
       model: "",
       maxChars: 24000,
+      strictJson: true,
       systemPrompt:
         "Eres un asistente de investigación jurídica. Lee el texto del documento y extrae las variables solicitadas. Responde SOLO con un objeto JSON válido. Si un dato no aparece, usa null. Incluye además una clave \"relaciones\" con una lista breve de relaciones relevantes entre conceptos, normas, actores o datos estadísticos.",
     },
@@ -104,6 +124,7 @@ export function newProject(): Project {
       { name: "autores", description: "Autores", type: "lista" },
       { name: "anio", description: "Año de publicación", type: "número" },
     ],
+    categories: [],
     createdAt: new Date().toISOString(),
   };
 }
