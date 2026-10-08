@@ -53,14 +53,24 @@ export function CategoriesEditor({
   const setCat = (i: number, patch: Partial<Category>) =>
     onChange(categories.map((c, j) => (j === i ? { ...c, ...patch } : c)));
 
+  // Agrega las que faltan y sustituye por su versión actual las que tienen la misma clave.
   const loadTesis = () => {
-    const names = new Set(categories.map((c) => c.name.trim()));
-    const missing = TESIS_CATEGORIES.filter((c) => !names.has(c.name));
-    onChange([...categories, ...structuredClone(missing)]);
+    const preset = new Map(TESIS_CATEGORIES.map((c) => [c.name, c]));
+    let updated = 0;
+    const next = categories.map((c) => {
+      const p = preset.get(c.name.trim());
+      if (!p) return c;
+      preset.delete(p.name);
+      if (JSON.stringify(c) === JSON.stringify(p)) return c;
+      updated++;
+      return structuredClone(p);
+    });
+    const added = [...preset.values()].map((c) => structuredClone(c));
+    onChange([...next, ...added]);
     setNotice(
-      missing.length
-        ? `Se agregaron ${missing.length} categorías. Revísalas y pulsa Guardar.`
-        : "Las categorías de la tesis ya estaban cargadas.",
+      added.length || updated
+        ? `Se agregaron ${added.length} y se actualizaron ${updated} categorías. Revísalas y pulsa Guardar.`
+        : "El libro de códigos de la tesis ya está al día.",
     );
   };
 
@@ -124,7 +134,7 @@ export function CategoriesEditor({
           + Categoría
         </Button>
         <Button variant="ghost" onClick={loadTesis}>
-          Cargar libro de códigos de la tesis
+          Cargar o actualizar libro de códigos de la tesis
         </Button>
         {notice && <span className="text-sm text-muted-foreground">{notice}</span>}
       </div>

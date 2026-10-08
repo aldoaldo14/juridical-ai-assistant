@@ -112,13 +112,16 @@ export const TESIS_CATEGORIES: Category[] = [
         "investigación y persecución penal (RI 7)",
         "investigación, acusación y sentencia por lavado de dinero",
       ),
-      v("recuperación de activos (RI 8)", "aseguramiento y decomiso por la vía penal"),
+      v(
+        "recuperación de activos (RI 8)",
+        "aseguramiento, decomiso y extinción de dominio como vías para privar de los bienes de origen ilícito",
+      ),
       v(
         "beneficiario final (R. 24)",
         "identificación y transparencia del beneficiario final o controlador de personas morales",
       ),
       v("transversal o general", "el régimen en su conjunto, sin un frente concreto"),
-      v("fuera de alcance", "financiamiento al terrorismo o extinción de dominio"),
+      v("fuera de alcance", "financiamiento al terrorismo"),
     ],
   },
   {

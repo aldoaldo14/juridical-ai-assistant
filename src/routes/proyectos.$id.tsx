@@ -53,7 +53,7 @@ function ProjectPage() {
       <Card title="Tema">
         <div className="grid gap-3">
           <Field label="Nombre"><Input value={p.name} onChange={(e) => set({ name: e.target.value })} /></Field>
-          <Field label="Tema o pregunta de investigación" hint="Se incluye en las instrucciones al modelo de análisis">
+          <Field label="Tema o pregunta de investigación" hint="Se incluye en las instrucciones al modelo de análisis. Descríbelo sin anticipar la hipótesis ni los resultados esperados: el modelo tendería a confirmarlos.">
             <Textarea rows={2} value={p.topic} onChange={(e) => set({ topic: e.target.value })} />
           </Field>
         </div>
