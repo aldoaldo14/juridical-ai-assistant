@@ -1,7 +1,8 @@
 // Libro de códigos precargable para la tesis doctoral sobre el régimen mexicano contra el lavado de dinero.
 // Parte de la matriz analítica del protocolo (dos ejes, cuatro frentes, plano técnico/efectividad,
 // naturaleza de la fuente). "Sentido", "explicación", "tipo de afirmación", "actor" y "jurisdicción"
-// son añadidos operativos para la codificación, no categorías del protocolo.
+// son añadidos operativos para la codificación, no categorías del protocolo. Los valores
+// "resultado: …" y "contexto: …" de "componente" y los actores añadidos salen del piloto con 10 artículos.
 // La hipótesis no se incluye a propósito: el modelo no debe ver qué resultado se espera.
 
 import type { Category } from "./store";
@@ -94,6 +95,14 @@ export const TESIS_CATEGORIES: Category[] = [
       v(
         "institucional: infraestructura de información",
         "registros, bases de datos, estadísticas y acceso a la información",
+      ),
+      v(
+        "resultado: indicador de efectividad",
+        "cifras o resultados del régimen (sentencias, decomisos, avisos, sanciones) sin atribuirlos a un componente",
+      ),
+      v(
+        "contexto: amenaza o riesgo",
+        "magnitud, modalidades o distribución del lavado y de sus delitos precedentes",
       ),
       v("no aplica", "el hallazgo no se refiere a ninguno de estos componentes"),
     ],
@@ -197,7 +206,12 @@ export const TESIS_CATEGORIES: Category[] = [
       v("Poder Judicial"),
       v("sujetos obligados financieros"),
       v("actividades vulnerables", "quienes realizan actividades del art. 17 de la LFPIORPI"),
+      v("SHCP"),
+      v("Poder Legislativo"),
+      v("autoridades estatales o municipales"),
       v("GAFI o GAFILAT"),
+      v("otros organismos internacionales", "OCDE, BID, ONU, FMI u otros"),
+      v("autoridades de otros países"),
       v("otro"),
       v("ninguno"),
     ],
