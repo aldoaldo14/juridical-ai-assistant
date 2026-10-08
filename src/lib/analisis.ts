@@ -20,7 +20,13 @@ export type ChatFn = (
   ep: Project["llm"],
   messages: Msg[],
   opts?: ChatOptions,
-) => Promise<{ content: string; ms: number; schemaRejected?: boolean }>;
+) => Promise<{
+  content: string;
+  ms: number;
+  schemaRejected?: boolean;
+  finishReason?: string | undefined;
+  reasoningChars?: number;
+}>;
 
 export type Analysis = {
   json: unknown;
@@ -29,6 +35,8 @@ export type Analysis = {
   fragments: FragmentResult[];
   /** Algún paso se hizo sin esquema porque el servidor lo rechazó. */
   schemaRejected: boolean;
+  /** Fragmentos o consolidaciones sin respuesta utilizable. Si hay avisos, faltan datos del documento. */
+  warnings: string[];
 };
 
 /** Error de un fragmento; conserva los resultados parciales ya obtenidos. */
@@ -69,7 +77,52 @@ export function buildPrompt(p: Project, f: Fragment, total: number) {
 const strict = (p: Project) => p.llm.strictJson !== false;
 
 const parsed = (json: unknown) =>
-  !(json && typeof json === "object" && "_sin_formato_json" in json);
+  !!json && typeof json === "object" && !Array.isArray(json) && !("_sin_formato_json" in json);
+
+/** Explica por qué una respuesta no sirve, o null si sirve. */
+function problem(
+  res: { content: string; finishReason?: string | undefined; reasoningChars?: number },
+  json: unknown,
+) {
+  if (parsed(json)) return null;
+  const what = res.content.trim() ? "respuesta sin JSON válido" : "respuesta vacía";
+  if (res.finishReason !== "length") return what;
+  const thinking = res.reasoningChars
+    ? `; razonó ${res.reasoningChars.toLocaleString("es-MX")} caracteres antes de responder`
+    : "";
+  return (
+    `${what}: el modelo agotó el límite de tokens o de contexto${thinking}. ` +
+    "Reduce el máximo de caracteres por fragmento, amplía el contexto del modelo o desactiva el razonamiento."
+  );
+}
+
+/**
+ * Unión sin modelo, para cuando la consolidación falla: en las listas, todos los elementos sin
+ * repetir; en los demás valores, el más frecuente entre los parciales (empate: el primero).
+ */
+export function mergeWithoutModel(jsons: unknown[]) {
+  const objs = jsons.filter(parsed) as Record<string, unknown>[];
+  const keys = [...new Set(objs.flatMap((o) => Object.keys(o)))];
+  const out: Record<string, unknown> = {};
+  for (const k of keys) {
+    const vals = objs.map((o) => o[k]).filter((v) => v !== null && v !== undefined && v !== "");
+    if (vals.some(Array.isArray)) {
+      const seen = new Map<string, unknown>();
+      vals
+        .flatMap((v) => (Array.isArray(v) ? v : [v]))
+        .forEach((v) => seen.set(JSON.stringify(v), v));
+      out[k] = [...seen.values()];
+    } else {
+      const count = new Map<string, { v: unknown; n: number }>();
+      vals.forEach((v) => {
+        const key = JSON.stringify(v);
+        count.set(key, { v, n: (count.get(key)?.n ?? 0) + 1 });
+      });
+      out[k] = [...count.values()].sort((a, b) => b.n - a.n)[0]?.v ?? null;
+    }
+  }
+  return out;
+}
 
 type Piece = { first: number; last: number; firstPage: number; lastPage: number; json: unknown };
 
@@ -108,6 +161,7 @@ async function consolidate(
   const schema = strict(p) ? buildSchema(p, { findings: false }) : undefined;
   let ms = 0;
   let schemaRejected = false;
+  const warnings: string[] = [];
   let current = pieces;
   for (;;) {
     const groups = batches(current, limit);
@@ -133,15 +187,23 @@ async function consolidate(
       );
       ms += res.ms;
       schemaRejected ||= !!res.schemaRejected;
+      let json = parseJson(res.content);
+      const issue = problem(res, json);
+      if (issue) {
+        json = mergeWithoutModel(group.map((x) => x.json));
+        warnings.push(
+          `Consolidación de ${label({ first: first.first, last: last.last, firstPage: first.firstPage, lastPage: last.lastPage, json })}: ${issue} Se unieron los parciales sin el modelo.`,
+        );
+      }
       next.push({
         first: first.first,
         last: last.last,
         firstPage: first.firstPage,
         lastPage: last.lastPage,
-        json: parseJson(res.content),
+        json,
       });
     }
-    if (next.length === 1) return { json: next[0]!.json, ms, schemaRejected };
+    if (next.length === 1) return { json: next[0]!.json, ms, schemaRejected, warnings };
     current = next;
   }
 }
@@ -162,6 +224,7 @@ export async function analyzeDocument(
   const schema = strict(p) ? buildSchema(p, { findings: true }) : undefined;
   const findings = usesFindings(p);
   let schemaRejected = false;
+  const warnings: string[] = [];
 
   for (const f of parts) {
     onProgress?.(
@@ -179,12 +242,19 @@ export async function analyzeDocument(
         { schema },
       );
       schemaRejected ||= !!res.schemaRejected;
+      const json = parseJson(res.content);
+      const issue = problem(res, json);
+      if (issue)
+        warnings.push(
+          total > 1 ? `Fragmento ${f.index}/${total} (${pageRange(f)}): ${issue}` : issue,
+        );
       fragments.push({
         fragment: f.index,
         firstPage: f.firstPage,
         lastPage: f.lastPage,
         ms: res.ms,
-        json: parseJson(res.content),
+        json,
+        ...(issue ? { problem: issue } : {}),
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -210,10 +280,23 @@ export async function analyzeDocument(
       consolidationMs: 0,
       fragments,
       schemaRejected,
+      warnings,
+    };
+
+  // Solo se consolidan los fragmentos con respuesta utilizable.
+  const usable = fragments.filter((f) => !f.problem);
+  if (usable.length <= 1)
+    return {
+      json: finish(usable[0] ? withoutFindings(usable[0].json) : {}),
+      ms: mapMs,
+      consolidationMs: 0,
+      fragments,
+      schemaRejected,
+      warnings,
     };
 
   try {
-    const pieces = fragments.map((f) => ({
+    const pieces = usable.map((f) => ({
       first: f.fragment,
       last: f.fragment,
       firstPage: f.firstPage,
@@ -227,6 +310,7 @@ export async function analyzeDocument(
       consolidationMs: c.ms,
       fragments,
       schemaRejected: schemaRejected || c.schemaRejected,
+      warnings: [...warnings, ...c.warnings],
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

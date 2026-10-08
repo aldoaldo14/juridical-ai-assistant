@@ -63,6 +63,7 @@ function Process() {
         r.json = res.json;
         if (res.fragments.length > 1) r.fragments = res.fragments;
         if (res.schemaRejected) r.schemaRejected = true;
+        if (res.warnings.length) r.warnings = res.warnings;
       } catch (e) {
         r.error = e instanceof Error ? e.message : String(e);
         if (e instanceof AnalysisError && e.fragments.length) r.fragments = e.fragments;
@@ -75,7 +76,7 @@ function Process() {
   };
 
   const exportAll = () =>
-    download(`${project?.name ?? "proyecto"}.json`, JSON.stringify(mine.map((r) => ({ archivo: r.file, paginas: r.pages, ...(typeof r.json === "object" ? r.json : { resultado: r.json }), ...(r.fragments ? { _parciales: r.fragments.map((f) => ({ fragmento: f.fragment, paginas: [f.firstPage, f.lastPage], resultado: f.json })) } : {}), error: r.error })), null, 2));
+    download(`${project?.name ?? "proyecto"}.json`, JSON.stringify(mine.map((r) => ({ archivo: r.file, paginas: r.pages, ...(typeof r.json === "object" ? r.json : { resultado: r.json }), ...(r.warnings ? { _avisos: r.warnings } : {}), ...(r.fragments ? { _parciales: r.fragments.map((f) => ({ fragmento: f.fragment, paginas: [f.firstPage, f.lastPage], resultado: f.json })) } : {}), error: r.error })), null, 2));
 
   const exportCsv = () =>
     project && download(`${project.name}-hallazgos.csv`, findingsCsv(project, mine), "text/csv;charset=utf-8");
@@ -123,6 +124,12 @@ function Process() {
                       {r.pages} pág · OCR {(r.ocrMs / 1000).toFixed(1)} s{r.pages ? ` (${(r.ocrMs / 1000 / r.pages).toFixed(1)} s/pág)` : ""} · análisis {(r.llmMs / 1000).toFixed(1)} s{r.fragments ? ` · ${r.fragments.length} fragmentos` : ""}{findingsSummary(r.json)}
                     </span>
                     {r.error && <span className="ml-2 text-xs text-destructive">{r.error}</span>}
+                    {r.warnings && (
+                      <span className="ml-2 block text-xs text-destructive">
+                        {`Incompleto: ${r.warnings.length} aviso${r.warnings.length === 1 ? "" : "s"}. `}
+                        {r.warnings.join(" · ")}
+                      </span>
+                    )}
                     {r.schemaRejected && (
                       <span className="ml-2 text-xs text-destructive">
                         El servidor no aceptó el esquema JSON; las categorías no quedaron garantizadas.

@@ -49,6 +49,8 @@ export type FragmentResult = {
   lastPage: number;
   ms: number;
   json: unknown;
+  /** Por qué la respuesta de este fragmento no sirvió (vacía, sin JSON, límite de contexto). */
+  problem?: string;
 };
 export type DocResult = {
   id: string;
@@ -64,6 +66,8 @@ export type DocResult = {
   fragments?: FragmentResult[];
   /** Si el servidor rechazó el esquema JSON y la respuesta se pidió sin él. */
   schemaRejected?: boolean;
+  /** Partes del documento que el modelo no codificó o que se unieron sin él. */
+  warnings?: string[];
   error?: string;
 };
 

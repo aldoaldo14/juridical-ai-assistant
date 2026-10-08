@@ -228,3 +228,68 @@ describe("analyzeDocument con libro de códigos", () => {
     expect(res.schemaRejected).toBe(true);
   });
 });
+
+describe("respuestas vacías o truncadas", () => {
+  const pages = Array.from({ length: 6 }, (_, i) =>
+    `Página ${i + 1}: la autoridad ${i + 1} falla. `.repeat(60),
+  );
+
+  it("avisa del fragmento vacío, lo deja fuera de la consolidación y conserva los demás", async () => {
+    const consolidated: string[] = [];
+    const chat: ChatFn = async (_ep, messages) => {
+      if (messages[0]!.content === CONSOLIDATION_PROMPT) {
+        consolidated.push(String(messages[1]!.content));
+        return { content: '{"titulo":"T"}', ms: 1 };
+      }
+      const user = String(messages[1]!.content);
+      if (user.includes("fragmento 1 de"))
+        return { content: "", ms: 1, finishReason: "length", reasoningChars: 9000 };
+      return { content: '{"titulo":"T"}', ms: 1, finishReason: "stop" };
+    };
+
+    const res = await analyzeDocument(project(4000), pages, chat);
+
+    expect(res.warnings).toHaveLength(1);
+    expect(res.warnings[0]).toMatch(
+      /^Fragmento 1\/\d+ \(páginas? .+\): respuesta vacía: el modelo agotó/,
+    );
+    expect(res.warnings[0]).toContain("razonó 9,000 caracteres");
+    expect(res.fragments[0]!.problem).toBeDefined();
+    expect(consolidated.join("\n")).not.toContain("Fragmento 1 (");
+    expect(res.json).toEqual({ titulo: "T" });
+  });
+
+  it("si la consolidación no devuelve JSON, une los parciales sin el modelo", async () => {
+    const chat: ChatFn = async (_ep, messages) => {
+      if (messages[0]!.content === CONSOLIDATION_PROMPT)
+        return { content: "", ms: 1, finishReason: "length" };
+      const n = Number(/fragmento (\d+) de/.exec(String(messages[1]!.content))![1]);
+      return {
+        content: JSON.stringify({
+          titulo: n === 2 ? "Otro" : "Título",
+          anio: null,
+          autores: [`A${n % 2}`],
+          relaciones: [`r${n}`],
+        }),
+        ms: 1,
+      };
+    };
+
+    const res = await analyzeDocument(project(4000), pages, chat);
+
+    expect(res.warnings.some((w) => w.startsWith("Consolidación de Fragmentos 1–"))).toBe(true);
+    const json = res.json as Record<string, unknown>;
+    expect(json["titulo"]).toBe("Título");
+    expect(json["anio"]).toBeNull();
+    expect(json["autores"]).toEqual(["A1", "A0"]);
+    expect((json["relaciones"] as string[]).length).toBe(res.fragments.length);
+  });
+
+  it("no avisa nada cuando todas las respuestas son válidas", async () => {
+    const res = await analyzeDocument(project(24000), ["uno"], async () => ({
+      content: "{}",
+      ms: 1,
+    }));
+    expect(res.warnings).toEqual([]);
+  });
+});

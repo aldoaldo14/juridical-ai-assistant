@@ -4,7 +4,7 @@ import {
   buildSchema,
   categoriesPrompt,
   findingsCsv,
-  normalize,
+  comparable,
   verifyFindings,
 } from "./categorias";
 import { TESIS_CATEGORIES } from "./libro-codigos-tesis";
@@ -108,8 +108,21 @@ describe("verifyFindings", () => {
     ]);
   });
 
-  it("normaliza espacios y rayas", () => {
-    expect(normalize("  A —  b\n\nC ")).toBe("a - b c");
+  it("tolera los cortes del texto extraído por pdf.js, pero no omisiones ni puntos suspensivos", () => {
+    const page = [
+      "los países con vocación ex- portadora de capital podrían retener el flujo ( country-by-country-report )",
+    ];
+    const res = verifyFindings(
+      [
+        { cita: "Los países con vocación exportadora de capital podrían retener el flujo" },
+        { cita: "(country-by-country-report)" },
+        { cita: "los países con vocación... de capital podrían retener" },
+        { cita: "de capital" },
+      ],
+      page,
+    );
+    expect(res.map((f) => f["cita_verificada"])).toEqual([true, true, false, false]);
+    expect(comparable("  A —  b\n\nC ")).toBe("abc");
   });
 });
 

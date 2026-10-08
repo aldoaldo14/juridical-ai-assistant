@@ -94,8 +94,19 @@ export async function chat(ep: Endpoint, messages: Msg[], opts: ChatOptions = {}
   const ms = performance.now() - t0;
   if (!r.ok) throw new Error(`Error ${r.status}: ${(await r.text()).slice(0, 200)}`);
   const j = await r.json();
-  const content: string = j.choices?.[0]?.message?.content ?? "";
-  return { content, ms, tokens: j.usage?.completion_tokens as number | undefined, schemaRejected };
+  const choice = j.choices?.[0];
+  const content: string = choice?.message?.content ?? "";
+  return {
+    content,
+    ms,
+    tokens: j.usage?.completion_tokens as number | undefined,
+    schemaRejected,
+    /** "stop" si terminó normalmente; "length" si agotó el límite de tokens o de contexto. */
+    finishReason: choice?.finish_reason as string | undefined,
+    /** Largo del razonamiento que el servidor devolvió aparte (0 si el modelo no razonó). */
+    reasoningChars: String(choice?.message?.reasoning_content ?? choice?.message?.reasoning ?? "")
+      .length,
+  };
 }
 
 export const ocrPage = (ep: Endpoint, prompt: string, dataUrl: string) =>

@@ -117,27 +117,31 @@ export const findingsOf = (json: unknown): Finding[] => {
   return Array.isArray(list) ? list.filter((f): f is Finding => !!f && typeof f === "object") : [];
 };
 
-/** Normaliza para comparar: une palabras cortadas con guion al final de línea, comillas, espacios y mayúsculas. */
-export const normalize = (s: string) =>
+/**
+ * Forma comparable de un texto: solo letras y números, en minúsculas.
+ * Así una cita coincide aunque el texto extraído del PDF parta palabras con guion o espacio
+ * ("ex- portadora", "incremen tado"), cambie comillas o espacios, o el modelo los corrija.
+ * Una cita que omite o cambia palabras, o que añade "...", sigue sin coincidir.
+ */
+export const comparable = (s: string) =>
   s
     .normalize("NFKC")
-    .replace(/(\p{L})-\s*\n\s*(\p{L})/gu, "$1$2")
-    .replace(/[“”«»„"]/g, '"')
-    .replace(/[‘’`´]/g, "'")
-    .replace(/[‐‑‒–—]/g, "-")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+
+/** Por debajo de este largo (en letras y números) una cita podría coincidir por azar. */
+export const MIN_CITA = 15;
 
 /**
  * Añade a cada hallazgo si su cita aparece literalmente en el documento
  * ("cita_verificada") y en qué páginas ("paginas_cita").
  */
 export function verifyFindings(findings: Finding[], pages: string[]): Finding[] {
-  const norm = pages.map(normalize);
+  const norm = pages.map(comparable);
   return findings.map((f) => {
-    const cita = typeof f.cita === "string" ? normalize(f.cita) : "";
-    const found = cita ? norm.flatMap((t, i) => (t.includes(cita) ? [i + 1] : [])) : [];
+    const cita = typeof f.cita === "string" ? comparable(f.cita) : "";
+    const found =
+      cita.length >= MIN_CITA ? norm.flatMap((t, i) => (t.includes(cita) ? [i + 1] : [])) : [];
     return { ...f, cita_verificada: found.length > 0, paginas_cita: found };
   });
 }
